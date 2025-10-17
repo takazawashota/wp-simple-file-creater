@@ -35,6 +35,7 @@ class WP_Simple_File_Creator {
         add_action('wp_ajax_get_file_content', array($this, 'ajax_get_file_content'));
         add_action('wp_ajax_list_directory', array($this, 'ajax_list_directory'));
         add_action('wp_ajax_check_file_exists', array($this, 'ajax_check_file_exists'));
+        add_action('wp_ajax_clear_history', array($this, 'ajax_clear_history'));
         
         // スタイルとスクリプトを登録
         add_action('admin_enqueue_scripts', array($this, 'enqueue_admin_assets'));
@@ -133,6 +134,7 @@ class WP_Simple_File_Creator {
                 <div class="fcm-tabs">
                     <button class="fcm-tab active" data-tab="tab-create">ファイル作成</button>
                     <button class="fcm-tab" data-tab="tab-files">作成済みファイル</button>
+                    <button class="fcm-tab" data-tab="tab-history">操作履歴</button>
                 </div>
                 
                 <!-- タブ1: ファイル作成 -->
@@ -202,6 +204,12 @@ class WP_Simple_File_Creator {
                 <div id="tab-files" class="fcm-tab-content">
                     <h2>作成済みファイル一覧</h2>
                     <?php $this->render_file_list(); ?>
+                </div>
+                
+                <!-- タブ3: 操作履歴 -->
+                <div id="tab-history" class="fcm-tab-content">
+                    <h2>操作履歴</h2>
+                    <?php $this->render_history_list(); ?>
                 </div>
             </div>
             
@@ -322,7 +330,8 @@ class WP_Simple_File_Creator {
                         file_name: fileName,
                         file_path: filePath,
                         file_content: fileContent,
-                        force_overwrite: true
+                        force_overwrite: true,
+                        is_edit: true
                     },
                     success: function(response) {
                         if (response.success) {
@@ -438,6 +447,7 @@ class WP_Simple_File_Creator {
         $file_path = wp_unslash($_POST['file_path']);
         $file_content = wp_unslash($_POST['file_content']);
         $force_overwrite = isset($_POST['force_overwrite']) && $_POST['force_overwrite'] === 'true';
+        $is_edit = isset($_POST['is_edit']) && $_POST['is_edit'] === 'true';
         
         // パスの検証
         if (!$this->is_valid_path($file_path)) {
@@ -474,7 +484,10 @@ class WP_Simple_File_Creator {
         // 作成したファイルを記録
         $this->save_created_file($file_name, $full_path);
         
-        $action_message = file_exists($full_path) && $force_overwrite ? '上書き保存しました' : '作成しました';
+        // 操作履歴を保存
+        $action_message = $force_overwrite ? '上書き保存しました' : '作成しました';
+        $history_action = $is_edit ? 'ファイル編集' : 'ファイル作成';
+        $this->save_operation_history($history_action, $full_path, $action_message);
         
         wp_send_json_success(array(
             'message' => 'ファイルを' . $action_message . ': ' . $full_path,
@@ -515,6 +528,9 @@ class WP_Simple_File_Creator {
             wp_send_json_error(array('message' => 'ディレクトリの作成に失敗しました。パーミッションを確認してください。'));
         }
         
+        // 操作履歴を保存
+        $this->save_operation_history('フォルダ作成', $full_path, 'フォルダを作成しました');
+        
         wp_send_json_success(array(
             'message' => 'ディレクトリを作成しました: ' . $full_path,
             'path' => $full_path
@@ -539,6 +555,10 @@ class WP_Simple_File_Creator {
         
         if (unlink($file_path)) {
             $this->remove_created_file($file_path);
+            
+            // 操作履歴を保存
+            $this->save_operation_history('ファイル削除', $file_path, 'ファイルを削除しました');
+            
             wp_send_json_success(array('message' => 'ファイルを削除しました'));
         } else {
             wp_send_json_error(array('message' => 'ファイルの削除に失敗しました'));
@@ -585,6 +605,10 @@ class WP_Simple_File_Creator {
         if ($this->delete_directory_recursive($dir_path)) {
             // 削除されたディレクトリ内のファイルをレコードからも削除
             $this->remove_files_in_directory($dir_path);
+            
+            // 操作履歴を保存
+            $this->save_operation_history('フォルダ削除', $dir_path, 'フォルダとその中身を削除しました');
+            
             wp_send_json_success(array('message' => 'ディレクトリを削除しました'));
         } else {
             wp_send_json_error(array('message' => 'ディレクトリの削除に失敗しました'));
@@ -814,6 +838,109 @@ class WP_Simple_File_Creator {
         });
         
         update_option('fcm_created_files', array_values($files));
+    }
+    
+    /**
+     * 操作履歴を保存
+     */
+    private function save_operation_history($action, $target, $details = '') {
+        $history = get_option('fcm_operation_history', array());
+        
+        $history_entry = array(
+            'id' => uniqid(),
+            'action' => $action,
+            'target' => $target,
+            'details' => $details,
+            'user' => wp_get_current_user()->user_login,
+            'timestamp' => current_time('mysql'),
+            'ip_address' => $_SERVER['REMOTE_ADDR']
+        );
+        
+        array_unshift($history, $history_entry);
+        
+        // 履歴は最新100件まで保持
+        if (count($history) > 100) {
+            $history = array_slice($history, 0, 100);
+        }
+        
+        update_option('fcm_operation_history', $history);
+    }
+    
+    /**
+     * 操作履歴の表示
+     */
+    public function render_history_list() {
+        $history = get_option('fcm_operation_history', array());
+        
+        if (empty($history)) {
+            echo '<p>操作履歴はありません。</p>';
+            return;
+        }
+        
+        echo '<div class="fcm-history-container">';
+        echo '<div class="fcm-history-actions" style="margin-bottom: 15px;">';
+        echo '<button type="button" id="clear-history-btn" class="fcm-button fcm-button-danger">';
+        echo '<span class="dashicons dashicons-trash"></span> 履歴をクリア';
+        echo '</button>';
+        echo '</div>';
+        
+        echo '<div class="fcm-history-list">';
+        
+        foreach ($history as $entry) {
+            $action_class = 'fcm-history-' . strtolower($entry['action']);
+            $action_icon = $this->get_action_icon($entry['action']);
+            
+            echo '<div class="fcm-history-item ' . $action_class . '">';
+            echo '<div class="fcm-history-header">';
+            echo '<span class="fcm-history-icon">' . $action_icon . '</span>';
+            echo '<span class="fcm-history-action">' . esc_html($entry['action']) . '</span>';
+            echo '<span class="fcm-history-time">' . esc_html($entry['timestamp']) . '</span>';
+            echo '</div>';
+            
+            echo '<div class="fcm-history-details">';
+            echo '<div class="fcm-history-target">対象: ' . esc_html($entry['target']) . '</div>';
+            
+            if (!empty($entry['details'])) {
+                echo '<div class="fcm-history-detail-info">詳細: ' . esc_html($entry['details']) . '</div>';
+            }
+            
+            echo '<div class="fcm-history-user">実行者: ' . esc_html($entry['user']) . ' (' . esc_html($entry['ip_address']) . ')</div>';
+            echo '</div>';
+            echo '</div>';
+        }
+        
+        echo '</div>';
+        echo '</div>';
+    }
+    
+    /**
+     * アクションアイコンを取得
+     */
+    private function get_action_icon($action) {
+        $icons = array(
+            'ファイル作成' => '<span class="dashicons dashicons-plus-alt"></span>',
+            'フォルダ作成' => '<span class="dashicons dashicons-category"></span>',
+            'ファイル編集' => '<span class="dashicons dashicons-edit"></span>',
+            'ファイル削除' => '<span class="dashicons dashicons-trash"></span>',
+            'フォルダ削除' => '<span class="dashicons dashicons-category"></span>'
+        );
+        
+        return isset($icons[$action]) ? $icons[$action] : '<span class="dashicons dashicons-admin-generic"></span>';
+    }
+    
+    /**
+     * AJAX: 履歴クリア
+     */
+    public function ajax_clear_history() {
+        check_ajax_referer('fcm_ajax_nonce', 'nonce');
+        
+        if (!current_user_can('manage_options')) {
+            wp_send_json_error(array('message' => '権限がありません'));
+        }
+        
+        delete_option('fcm_operation_history');
+        
+        wp_send_json_success(array('message' => '操作履歴をクリアしました'));
     }
 }
 

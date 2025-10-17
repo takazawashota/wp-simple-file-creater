@@ -302,3 +302,100 @@
 .fcm-button-small.fcm-button-danger:hover {
     background: #b32d2e;
 }
+
+/* 履歴スタイル */
+.fcm-history-container {
+    margin-top: 20px;
+}
+
+.fcm-history-actions {
+    display: flex;
+    justify-content: flex-end;
+    padding-bottom: 15px;
+    border-bottom: 1px solid #ddd;
+}
+
+.fcm-history-list {
+    max-height: 600px;
+    overflow-y: auto;
+}
+
+.fcm-history-item {
+    padding: 15px;
+    border-bottom: 1px solid #f0f0f0;
+    transition: background-color 0.2s ease;
+}
+
+.fcm-history-item:hover {
+    background-color: #f8f9fa;
+}
+
+.fcm-history-header {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    margin-bottom: 8px;
+}
+
+.fcm-history-icon {
+    font-size: 16px;
+    width: 20px;
+    display: flex;
+    justify-content: center;
+}
+
+.fcm-history-action {
+    font-weight: 600;
+    color: #1d2327;
+    flex-grow: 1;
+}
+
+.fcm-history-time {
+    color: #646970;
+    font-size: 12px;
+}
+
+.fcm-history-details {
+    margin-left: 30px;
+    font-size: 13px;
+    color: #646970;
+}
+
+.fcm-history-target {
+    font-family: monospace;
+    background: #f6f7f7;
+    padding: 4px 8px;
+    border-radius: 3px;
+    margin-bottom: 4px;
+    word-break: break-all;
+}
+
+.fcm-history-detail-info {
+    margin-bottom: 4px;
+}
+
+.fcm-history-user {
+    font-size: 11px;
+    color: #8c8f94;
+}
+
+/* アクション別カラーリング */
+.fcm-history-ファイル作成 .fcm-history-icon {
+    color: #00a32a;
+}
+
+.fcm-history-フォルダ作成 .fcm-history-icon {
+    color: #00a32a;
+}
+
+.fcm-history-ファイル編集 .fcm-history-icon {
+    color: #2271b1;
+}
+
+.fcm-history-ファイル削除 .fcm-history-icon {
+    color: #d63638;
+}
+
+.fcm-history-フォルダ削除 .fcm-history-icon {
+    color: #d63638;
+}

@@ -395,4 +395,37 @@ jQuery(document).ready(function ($) {
         const editUrl = fcm_ajax_object.edit_page_url + '&file=' + encodeURIComponent(filePath);
         window.location.href = editUrl;
     });
+
+    // 履歴クリア
+    $(document).on('click', '#clear-history-btn', function (e) {
+        e.preventDefault();
+
+        if (!confirm('操作履歴をすべてクリアしますか？この操作は元に戻せません。')) {
+            return;
+        }
+
+        $(this).prop('disabled', true).text('クリア中...');
+
+        $.ajax({
+            url: fcm_ajax_object.ajax_url,
+            type: 'POST',
+            data: {
+                action: 'clear_history',
+                nonce: fcm_ajax_object.nonce
+            },
+            success: function (response) {
+                if (response.success) {
+                    location.reload();
+                } else {
+                    alert('エラー: ' + response.data.message);
+                }
+            },
+            error: function () {
+                alert('エラーが発生しました');
+            },
+            complete: function () {
+                $('#clear-history-btn').prop('disabled', false).text('履歴をクリア');
+            }
+        });
+    });
 });
