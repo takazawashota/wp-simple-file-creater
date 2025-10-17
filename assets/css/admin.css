@@ -189,9 +189,7 @@
 }
 
 .fcm-parent-dir {
-    border-bottom: 1px solid #ddd;
-    padding-bottom: 8px;
-    margin-bottom: 8px;
+    padding-bottom: 0;
 }
 
 /* 編集ページ専用スタイル */
