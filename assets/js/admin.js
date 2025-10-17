@@ -52,10 +52,24 @@ jQuery(document).ready(function ($) {
                         html += '<div style="padding: 10px; color: #646970;">このディレクトリは空です</div>';
                     } else {
                         response.data.forEach(function (item) {
-                            const itemClass = item.type === 'dir' ? 'fcm-directory-item fcm-dir-item' : 'fcm-directory-item fcm-file-item';
-                            html += '<div class="' + itemClass + '" data-path="' + item.path + '" data-type="' + item.type + '">';
-                            html += item.type === 'dir' ? '📁 ' : '📄 ';
-                            html += item.name + '</div>';
+                            if (item.type === 'dir') {
+                                // ディレクトリの場合
+                                html += '<div class="fcm-directory-item fcm-dir-item" data-path="' + item.path + '" data-type="' + item.type + '">';
+                                html += '📁 ' + item.name;
+                                html += '</div>';
+                            } else {
+                                // ファイルの場合
+                                html += '<div class="fcm-directory-file-item" data-path="' + item.path + '" data-type="' + item.type + '">';
+                                html += '<div class="fcm-file-info-dir">';
+                                html += '<span class="fcm-file-icon">📄</span>';
+                                html += '<span class="fcm-file-name-dir">' + item.name + '</span>';
+                                html += '</div>';
+                                html += '<div class="fcm-file-actions-dir">';
+                                html += '<button class="fcm-button-small fcm-edit-file-dir" data-file="' + item.path + '">編集</button>';
+                                html += '<button class="fcm-button-small fcm-button-danger fcm-delete-file-dir" data-file="' + item.path + '">削除</button>';
+                                html += '</div>';
+                                html += '</div>';
+                            }
                         });
                     }
                     $('#directory-tree').html(html);
@@ -77,9 +91,9 @@ jQuery(document).ready(function ($) {
         $('#file_path').val(path + '/');
     });
 
-    // ファイルアイテムのクリック
-    $(document).on('click', '.fcm-file-item', function () {
-        const path = $(this).data('path');
+    // ディレクトリツリー内のファイル名クリック（パス設定用）
+    $(document).on('click', '.fcm-file-name-dir', function () {
+        const path = $(this).closest('.fcm-directory-file-item').data('path');
         const directory = path.substring(0, path.lastIndexOf('/') + 1);
         $('#file_path').val(directory);
     });
@@ -89,6 +103,55 @@ jQuery(document).ready(function ($) {
         const path = $(this).data('path');
         loadDirectory(path);
         $('#file_path').val(path);
+    });
+
+    // ディレクトリツリー内のファイル編集
+    $(document).on('click', '.fcm-edit-file-dir', function (e) {
+        e.stopPropagation();
+        const filePath = $(this).data('file');
+
+        // 編集ページに遷移
+        const editUrl = fcm_ajax_object.edit_page_url + '&file=' + encodeURIComponent(filePath);
+        window.location.href = editUrl;
+    });
+
+    // ディレクトリツリー内のファイル削除
+    $(document).on('click', '.fcm-delete-file-dir', function (e) {
+        e.stopPropagation();
+
+        if (!confirm('本当にこのファイルを削除しますか？')) {
+            return;
+        }
+
+        const filePath = $(this).data('file');
+        const $button = $(this);
+
+        $button.prop('disabled', true).text('削除中...');
+
+        $.ajax({
+            url: fcm_ajax_object.ajax_url,
+            type: 'POST',
+            data: {
+                action: 'delete_file',
+                nonce: fcm_ajax_object.nonce,
+                file_path: filePath
+            },
+            success: function (response) {
+                if (response.success) {
+                    alert('ファイルを削除しました');
+                    // 現在のディレクトリを再読み込み
+                    const currentPath = $('#file_path').val() || fcm_ajax_object.presets.root;
+                    loadDirectory(currentPath);
+                } else {
+                    alert('エラー: ' + response.data.message);
+                    $button.prop('disabled', false).text('削除');
+                }
+            },
+            error: function () {
+                alert('削除に失敗しました');
+                $button.prop('disabled', false).text('削除');
+            }
+        });
     });
 
     // 初期ディレクトリを読み込み
