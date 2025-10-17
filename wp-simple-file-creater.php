@@ -16,7 +16,7 @@ if ( ! defined( 'ABSPATH' ) ) {
 
 
 /**
- * ファイル作成マネージャークラス
+ * WP Simple File Creator クラス
  */
 class WP_Simple_File_Creator {
     
@@ -42,8 +42,8 @@ class WP_Simple_File_Creator {
      */
     public function add_admin_menu() {
         add_menu_page(
-            'ファイル作成マネージャー',           // ページタイトル
-            'ファイル作成',                       // メニュータイトル
+            'WP Simple File Creator',           // ページタイトル
+            'WP Simple File Creator',                       // メニュータイトル
             'manage_options',                     // 必要な権限
             'file-creator-manager',               // メニュースラッグ
             array($this, 'render_admin_page'),    // コールバック関数
@@ -101,7 +101,6 @@ class WP_Simple_File_Creator {
         }
         .fcm-form-group textarea {
             min-height: 300px;
-            font-family: 'Courier New', monospace;
             font-size: 13px;
         }
         .fcm-button {
@@ -162,7 +161,6 @@ class WP_Simple_File_Creator {
         .fcm-file-path {
             font-size: 12px;
             color: #646970;
-            font-family: 'Courier New', monospace;
         }
         .fcm-file-actions {
             display: flex;
@@ -222,7 +220,6 @@ class WP_Simple_File_Creator {
         .fcm-directory-item {
             padding: 5px;
             cursor: pointer;
-            font-family: 'Courier New', monospace;
             font-size: 13px;
             border-radius: 3px;
             transition: background 0.2s;
@@ -301,12 +298,12 @@ class WP_Simple_File_Creator {
                             if (path !== '" . ABSPATH . "' && path !== '/') {
                                 const parentPath = path.substring(0, path.lastIndexOf('/', path.length - 2) + 1);
                                 html += '<div class=\"fcm-directory-item fcm-parent-dir\" data-path=\"' + parentPath + '\" style=\"font-weight: bold; color: #2271b1;\">';
-                                html += '⬆️ 親ディレクトリへ戻る</div>';
+                                html += '親ディレクトリへ戻る</div>';
                                 html += '<hr style=\"margin: 10px 0; border: none; border-top: 1px solid #ddd;\">';
                             }
                             
                             // 現在のパスを表示
-                            html += '<div style=\"padding: 5px; background: #f0f0f1; margin-bottom: 10px; font-size: 12px; font-family: Courier New; color: #646970;\">';
+                            html += '<div style=\"padding: 5px; background: #f0f0f1; margin-bottom: 10px; font-size: 12px; color: #646970;\">';
                             html += '📂 現在: ' + path + '</div>';
                             
                             if (response.data.length === 0) {
@@ -497,7 +494,7 @@ class WP_Simple_File_Creator {
         
         ?>
         <div class="wrap">
-            <h1>📝 ファイル作成マネージャー</h1>
+            <h1>WP Simple File Creator</h1>
             
             <div id="message-container"></div>
             
