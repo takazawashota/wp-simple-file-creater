@@ -32,9 +32,13 @@ class WP_Simple_File_Creator {
         add_action('wp_ajax_delete_file', array($this, 'ajax_delete_file'));
         add_action('wp_ajax_get_file_content', array($this, 'ajax_get_file_content'));
         add_action('wp_ajax_list_directory', array($this, 'ajax_list_directory'));
+        add_action('wp_ajax_check_file_exists', array($this, 'ajax_check_file_exists'));
         
         // スタイルとスクリプトを登録
         add_action('admin_enqueue_scripts', array($this, 'enqueue_admin_assets'));
+        
+        // 重複ファイル記録のクリーンアップ
+        add_action('admin_init', array($this, 'cleanup_duplicate_files'));
     }
     
     /**
@@ -61,427 +65,40 @@ class WP_Simple_File_Creator {
             return;
         }
         
-        // インラインスタイル
-        wp_add_inline_style('wp-admin', $this->get_admin_styles());
+        // CSSファイルを読み込み
+        wp_enqueue_style(
+            'fcm-admin-style',
+            plugin_dir_url(__FILE__) . 'assets/css/admin.css',
+            array(),
+            '1.0.0'
+        );
         
-        // インラインスクリプト
-        wp_enqueue_script('jquery');
-        wp_add_inline_script('jquery', $this->get_admin_scripts());
+        // JavaScriptファイルを読み込み
+        wp_enqueue_script(
+            'fcm-admin-script',
+            plugin_dir_url(__FILE__) . 'assets/js/admin.js',
+            array('jquery'),
+            '1.0.0',
+            true
+        );
+        
+        // JavaScriptにデータを渡す
+        wp_localize_script('fcm-admin-script', 'fcm_ajax_object', array(
+            'ajax_url' => admin_url('admin-ajax.php'),
+            'nonce' => wp_create_nonce('fcm_ajax_nonce'),
+            'presets' => array(
+                'wp-content' => WP_CONTENT_DIR . '/',
+                'themes' => get_theme_root() . '/',
+                'plugins' => WP_PLUGIN_DIR . '/',
+                'uploads' => wp_upload_dir()['basedir'] . '/',
+                'root' => ABSPATH
+            )
+        ));
     }
     
-    /**
-     * 管理画面のスタイル
-     */
-    private function get_admin_styles() {
-        return "
-        .fcm-container {
-            max-width: 1200px;
-            margin: 20px 0;
-            background: #fff;
-            padding: 20px;
-            box-shadow: 0 1px 3px rgba(0,0,0,0.1);
-        }
-        .fcm-form-group {
-            margin-bottom: 20px;
-        }
-        .fcm-form-group label {
-            display: block;
-            font-weight: 600;
-            margin-bottom: 8px;
-            color: #1d2327;
-        }
-        .fcm-form-group input[type='text'],
-        .fcm-form-group select,
-        .fcm-form-group textarea {
-            width: 100%;
-            padding: 8px 12px;
-            border: 1px solid #ddd;
-            border-radius: 4px;
-            font-size: 14px;
-        }
-        .fcm-form-group textarea {
-            min-height: 300px;
-            font-size: 13px;
-        }
-        .fcm-button {
-            background: #2271b1;
-            color: #fff;
-            border: none;
-            padding: 10px 20px;
-            border-radius: 4px;
-            cursor: pointer;
-            font-size: 14px;
-            font-weight: 500;
-        }
-        .fcm-button:hover {
-            background: #135e96;
-        }
-        .fcm-button-danger {
-            background: #d63638;
-        }
-        .fcm-button-danger:hover {
-            background: #b32d2e;
-        }
-        .fcm-alert {
-            padding: 12px 16px;
-            margin: 20px 0;
-            border-radius: 4px;
-            border-left: 4px solid;
-        }
-        .fcm-alert-success {
-            background: #edfaef;
-            border-color: #00a32a;
-            color: #00600f;
-        }
-        .fcm-alert-error {
-            background: #fcf0f1;
-            border-color: #d63638;
-            color: #50575e;
-        }
-        .fcm-file-list {
-            margin-top: 30px;
-        }
-        .fcm-file-item {
-            display: flex;
-            justify-content: space-between;
-            align-items: center;
-            padding: 12px;
-            border: 1px solid #ddd;
-            border-radius: 4px;
-            margin-bottom: 10px;
-            background: #f9f9f9;
-        }
-        .fcm-file-info {
-            flex: 1;
-        }
-        .fcm-file-name {
-            font-weight: 600;
-            color: #1d2327;
-        }
-        .fcm-file-path {
-            font-size: 12px;
-            color: #646970;
-        }
-        .fcm-file-actions {
-            display: flex;
-            gap: 10px;
-        }
-        .fcm-preset-buttons {
-            display: flex;
-            gap: 10px;
-            flex-wrap: wrap;
-            margin-bottom: 15px;
-        }
-        .fcm-preset-btn {
-            padding: 6px 12px;
-            background: #f0f0f1;
-            border: 1px solid #ddd;
-            border-radius: 4px;
-            cursor: pointer;
-            font-size: 13px;
-        }
-        .fcm-preset-btn:hover {
-            background: #dcdcde;
-        }
-        .fcm-tabs {
-            display: flex;
-            gap: 10px;
-            margin-bottom: 20px;
-            border-bottom: 2px solid #ddd;
-        }
-        .fcm-tab {
-            padding: 10px 20px;
-            cursor: pointer;
-            border: none;
-            background: none;
-            font-size: 14px;
-            font-weight: 500;
-            color: #646970;
-        }
-        .fcm-tab.active {
-            color: #2271b1;
-            border-bottom: 2px solid #2271b1;
-            margin-bottom: -2px;
-        }
-        .fcm-tab-content {
-            display: none;
-        }
-        .fcm-tab-content.active {
-            display: block;
-        }
-        .fcm-directory-tree {
-            max-height: 400px;
-            overflow-y: auto;
-            border: 1px solid #ddd;
-            border-radius: 4px;
-            padding: 10px;
-            background: #f9f9f9;
-        }
-        .fcm-directory-item {
-            padding: 5px;
-            cursor: pointer;
-            font-size: 13px;
-            border-radius: 3px;
-            transition: background 0.2s;
-        }
-        .fcm-directory-item:hover {
-            background: #e0e0e0;
-        }
-        .fcm-dir-item {
-            font-weight: 500;
-            color: #2271b1;
-        }
-        .fcm-file-item {
-            color: #646970;
-        }
-        .fcm-parent-dir {
-            border-bottom: 1px solid #ddd;
-            padding-bottom: 8px;
-            margin-bottom: 8px;
-        }
-        ";
-    }
+
     
-    /**
-     * 管理画面のJavaScript
-     */
-    private function get_admin_scripts() {
-        $ajax_url = admin_url('admin-ajax.php');
-        $nonce = wp_create_nonce('fcm_ajax_nonce');
-        
-        return "
-        jQuery(document).ready(function($) {
-            // タブ切り替え
-            $('.fcm-tab').on('click', function() {
-                const tabId = $(this).data('tab');
-                $('.fcm-tab').removeClass('active');
-                $('.fcm-tab-content').removeClass('active');
-                $(this).addClass('active');
-                $('#' + tabId).addClass('active');
-            });
-            
-            // プリセットパス
-            const presets = {
-                'wp-content': '" . WP_CONTENT_DIR . "/',
-                'themes': '" . get_theme_root() . "/',
-                'plugins': '" . WP_PLUGIN_DIR . "/',
-                'uploads': '" . wp_upload_dir()['basedir'] . "/',
-                'root': '" . ABSPATH . "'
-            };
-            
-            // プリセットボタンのクリック
-            $('.fcm-preset-btn').on('click', function() {
-                const preset = $(this).data('preset');
-                const path = presets[preset];
-                $('#file_path').val(path);
-                // クリックした階層のディレクトリを表示
-                loadDirectory(path);
-            });
-            
-            // ディレクトリ一覧を読み込み
-            function loadDirectory(path) {
-                $('#directory-tree').html('<div style=\"padding: 10px; color: #646970;\">読み込み中...</div>');
-                
-                $.ajax({
-                    url: '" . $ajax_url . "',
-                    type: 'POST',
-                    data: {
-                        action: 'list_directory',
-                        nonce: '" . $nonce . "',
-                        path: path
-                    },
-                    success: function(response) {
-                        if (response.success) {
-                            let html = '';
-                            
-                            // 親ディレクトリへ戻るボタン（ルートでない場合）
-                            if (path !== '" . ABSPATH . "' && path !== '/') {
-                                const parentPath = path.substring(0, path.lastIndexOf('/', path.length - 2) + 1);
-                                html += '<div class=\"fcm-directory-item fcm-parent-dir\" data-path=\"' + parentPath + '\" style=\"font-weight: bold; color: #2271b1;\">';
-                                html += '親ディレクトリへ戻る</div>';
-                                html += '<hr style=\"margin: 10px 0; border: none; border-top: 1px solid #ddd;\">';
-                            }
-                            
-                            // 現在のパスを表示
-                            html += '<div style=\"padding: 5px; background: #f0f0f1; margin-bottom: 10px; font-size: 12px; color: #646970;\">';
-                            html += '📂 現在: ' + path + '</div>';
-                            
-                            if (response.data.length === 0) {
-                                html += '<div style=\"padding: 10px; color: #646970;\">このディレクトリは空です</div>';
-                            } else {
-                                response.data.forEach(function(item) {
-                                    const itemClass = item.type === 'dir' ? 'fcm-directory-item fcm-dir-item' : 'fcm-directory-item fcm-file-item';
-                                    html += '<div class=\"' + itemClass + '\" data-path=\"' + item.path + '\" data-type=\"' + item.type + '\">';
-                                    html += item.type === 'dir' ? '📁 ' : '📄 ';
-                                    html += item.name + '</div>';
-                                });
-                            }
-                            $('#directory-tree').html(html);
-                        } else {
-                            $('#directory-tree').html('<div style=\"padding: 10px; color: #d63638;\">エラー: ' + response.data.message + '</div>');
-                        }
-                    },
-                    error: function() {
-                        $('#directory-tree').html('<div style=\"padding: 10px; color: #d63638;\">読み込みに失敗しました</div>');
-                    }
-                });
-            }
-            
-            // ディレクトリアイテムのクリック
-            $(document).on('click', '.fcm-dir-item', function() {
-                const path = $(this).data('path');
-                // ディレクトリの場合は、その階層を表示
-                loadDirectory(path + '/');
-                $('#file_path').val(path + '/');
-            });
-            
-            // ファイルアイテムのクリック
-            $(document).on('click', '.fcm-file-item', function() {
-                const path = $(this).data('path');
-                const directory = path.substring(0, path.lastIndexOf('/') + 1);
-                $('#file_path').val(directory);
-            });
-            
-            // 親ディレクトリへ戻る
-            $(document).on('click', '.fcm-parent-dir', function() {
-                const path = $(this).data('path');
-                loadDirectory(path);
-                $('#file_path').val(path);
-            });
-            
-            // 初期ディレクトリを読み込み
-            loadDirectory('" . ABSPATH . "');
-            
-            // ファイル作成フォームの送信
-            $('#create-file-form').on('submit', function(e) {
-                e.preventDefault();
-                
-                const fileName = $('#file_name').val();
-                const filePath = $('#file_path').val();
-                const fileContent = $('#file_content').val();
-                
-                if (!fileName || !filePath) {
-                    alert('ファイル名とパスを入力してください');
-                    return;
-                }
-                
-                $('#create-file-btn').prop('disabled', true).text('作成中...');
-                
-                $.ajax({
-                    url: '" . $ajax_url . "',
-                    type: 'POST',
-                    data: {
-                        action: 'create_file',
-                        nonce: '" . $nonce . "',
-                        file_name: fileName,
-                        file_path: filePath,
-                        file_content: fileContent
-                    },
-                    success: function(response) {
-                        if (response.success) {
-                            $('#message-container').html(
-                                '<div class=\"fcm-alert fcm-alert-success\">' + 
-                                response.data.message + 
-                                '</div>'
-                            );
-                            // フォームをリセット
-                            $('#file_content').val('');
-                            // ファイルリストを更新
-                            setTimeout(function() {
-                                location.reload();
-                            }, 1500);
-                        } else {
-                            $('#message-container').html(
-                                '<div class=\"fcm-alert fcm-alert-error\">' + 
-                                response.data.message + 
-                                '</div>'
-                            );
-                        }
-                    },
-                    error: function() {
-                        $('#message-container').html(
-                            '<div class=\"fcm-alert fcm-alert-error\">エラーが発生しました</div>'
-                        );
-                    },
-                    complete: function() {
-                        $('#create-file-btn').prop('disabled', false).text('ファイルを作成');
-                    }
-                });
-            });
-            
-            // ファイル削除
-            $(document).on('click', '.fcm-delete-file', function() {
-                if (!confirm('本当にこのファイルを削除しますか？')) {
-                    return;
-                }
-                
-                const filePath = $(this).data('file');
-                
-                $.ajax({
-                    url: '" . $ajax_url . "',
-                    type: 'POST',
-                    data: {
-                        action: 'delete_file',
-                        nonce: '" . $nonce . "',
-                        file_path: filePath
-                    },
-                    success: function(response) {
-                        if (response.success) {
-                            alert('ファイルを削除しました');
-                            location.reload();
-                        } else {
-                            alert('エラー: ' + response.data.message);
-                        }
-                    }
-                });
-            });
-            
-            // ファイル編集
-            $(document).on('click', '.fcm-edit-file', function() {
-                const filePath = $(this).data('file');
-                
-                $.ajax({
-                    url: '" . $ajax_url . "',
-                    type: 'POST',
-                    data: {
-                        action: 'get_file_content',
-                        nonce: '" . $nonce . "',
-                        file_path: filePath
-                    },
-                    success: function(response) {
-                        if (response.success) {
-                            // タブを「ファイル作成」に切り替え
-                            $('.fcm-tab[data-tab=\"tab-create\"]').click();
-                            
-                            // フォームに値を設定
-                            $('#file_content').val(response.data.content);
-                            $('#file_name').val(response.data.filename);
-                            $('#file_path').val(response.data.directory);
-                            
-                            // ディレクトリツリーも更新
-                            loadDirectory(response.data.directory);
-                            
-                            // 上部にスクロール
-                            $('html, body').animate({ scrollTop: 0 }, 'slow');
-                            
-                            // 編集中であることを通知
-                            $('#message-container').html(
-                                '<div class=\"fcm-alert fcm-alert-success\">' + 
-                                '📝 ファイル「' + response.data.filename + '」を編集中です。変更後「ファイルを作成」ボタンで上書き保存されます。' +
-                                '</div>'
-                            );
-                        } else {
-                            alert('エラー: ' + response.data.message);
-                        }
-                    },
-                    error: function() {
-                        alert('ファイルの読み込みに失敗しました');
-                    }
-                });
-            });
-        });
-        ";
-    }
+
     
     /**
      * 管理画面ページのレンダリング
@@ -577,7 +194,7 @@ class WP_Simple_File_Creator {
             
             <!-- 警告メッセージ -->
             <div class="fcm-container" style="margin-top: 20px;">
-                <h3>⚠️ 重要な注意事項</h3>
+                <h3>重要な注意事項</h3>
                 <ul>
                     <li>この機能は強力なため、使用には十分注意してください</li>
                     <li>システムファイルを上書きしないよう注意してください</li>
@@ -601,8 +218,28 @@ class WP_Simple_File_Creator {
             return;
         }
         
-        echo '<div class="fcm-file-list">';
+        // 同じパスのファイルをグループ化（最新のもののみ残す）
+        $grouped_files = array();
         foreach ($files as $file) {
+            $full_path = $file['full_path'];
+            
+            // 既に同じパスのファイルが存在する場合は、より新しい日時のものを保持
+            if (isset($grouped_files[$full_path])) {
+                if (strtotime($file['created_at']) > strtotime($grouped_files[$full_path]['created_at'])) {
+                    $grouped_files[$full_path] = $file;
+                }
+            } else {
+                $grouped_files[$full_path] = $file;
+            }
+        }
+        
+        // 作成日時で降順ソート
+        uasort($grouped_files, function($a, $b) {
+            return strtotime($b['created_at']) - strtotime($a['created_at']);
+        });
+        
+        echo '<div class="fcm-file-list">';
+        foreach ($grouped_files as $file) {
             $file_exists = file_exists($file['full_path']);
             ?>
             <div class="fcm-file-item">
@@ -614,7 +251,7 @@ class WP_Simple_File_Creator {
                         <?php endif; ?>
                     </div>
                     <div class="fcm-file-path"><?php echo esc_html($file['full_path']); ?></div>
-                    <small>作成日時: <?php echo esc_html($file['created_at']); ?></small>
+                    <small>最終更新: <?php echo esc_html($file['created_at']); ?></small>
                 </div>
                 <div class="fcm-file-actions">
                     <?php if ($file_exists): ?>
@@ -653,6 +290,7 @@ class WP_Simple_File_Creator {
         $file_name = sanitize_file_name($_POST['file_name']);
         $file_path = wp_unslash($_POST['file_path']);
         $file_content = wp_unslash($_POST['file_content']);
+        $force_overwrite = isset($_POST['force_overwrite']) && $_POST['force_overwrite'] === 'true';
         
         // パスの検証
         if (!$this->is_valid_path($file_path)) {
@@ -661,6 +299,15 @@ class WP_Simple_File_Creator {
         
         // フルパスを生成
         $full_path = rtrim($file_path, '/') . '/' . $file_name;
+        
+        // ファイルが既に存在し、強制上書きが指定されていない場合は確認を求める
+        if (file_exists($full_path) && !$force_overwrite) {
+            wp_send_json_error(array(
+                'message' => 'ファイルが既に存在します。上書きしますか？',
+                'requires_confirmation' => true,
+                'full_path' => $full_path
+            ));
+        }
         
         // ディレクトリが存在しない場合は作成
         $directory = dirname($full_path);
@@ -680,8 +327,10 @@ class WP_Simple_File_Creator {
         // 作成したファイルを記録
         $this->save_created_file($file_name, $full_path);
         
+        $action_message = file_exists($full_path) && $force_overwrite ? '上書き保存しました' : '作成しました';
+        
         wp_send_json_success(array(
-            'message' => 'ファイルを作成しました: ' . $full_path,
+            'message' => 'ファイルを' . $action_message . ': ' . $full_path,
             'path' => $full_path
         ));
     }
@@ -780,6 +429,35 @@ class WP_Simple_File_Creator {
     }
     
     /**
+     * AJAX: ファイル存在確認
+     */
+    public function ajax_check_file_exists() {
+        check_ajax_referer('fcm_ajax_nonce', 'nonce');
+        
+        if (!current_user_can('manage_options')) {
+            wp_send_json_error(array('message' => '権限がありません'));
+        }
+        
+        $file_name = sanitize_file_name($_POST['file_name']);
+        $file_path = wp_unslash($_POST['file_path']);
+        
+        // パスの検証
+        if (!$this->is_valid_path($file_path)) {
+            wp_send_json_error(array('message' => '無効なパスです'));
+        }
+        
+        // フルパスを生成
+        $full_path = rtrim($file_path, '/') . '/' . $file_name;
+        
+        $file_exists = file_exists($full_path);
+        
+        wp_send_json_success(array(
+            'exists' => $file_exists,
+            'full_path' => $full_path
+        ));
+    }
+    
+    /**
      * パスの検証
      */
     private function is_valid_path($path) {
@@ -810,6 +488,12 @@ class WP_Simple_File_Creator {
     private function save_created_file($file_name, $full_path) {
         $files = get_option('fcm_created_files', array());
         
+        // 既存の同じパスのファイル記録を削除
+        $files = array_filter($files, function($file) use ($full_path) {
+            return $file['full_path'] !== $full_path;
+        });
+        
+        // 新しい記録を追加
         $files[] = array(
             'name' => $file_name,
             'full_path' => $full_path,
@@ -830,6 +514,34 @@ class WP_Simple_File_Creator {
         });
         
         update_option('fcm_created_files', array_values($files));
+    }
+    
+    /**
+     * 重複したファイル記録をクリーンアップ
+     */
+    public function cleanup_duplicate_files() {
+        $files = get_option('fcm_created_files', array());
+        
+        if (empty($files)) {
+            return;
+        }
+        
+        $grouped_files = array();
+        foreach ($files as $file) {
+            $full_path = $file['full_path'];
+            
+            // 既に同じパスのファイルが存在する場合は、より新しい日時のものを保持
+            if (isset($grouped_files[$full_path])) {
+                if (strtotime($file['created_at']) > strtotime($grouped_files[$full_path]['created_at'])) {
+                    $grouped_files[$full_path] = $file;
+                }
+            } else {
+                $grouped_files[$full_path] = $file;
+            }
+        }
+        
+        // クリーンアップされたデータを保存
+        update_option('fcm_created_files', array_values($grouped_files));
     }
 }
 
