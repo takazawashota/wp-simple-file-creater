@@ -42,6 +42,9 @@ class WP_Simple_File_Creator {
         
         // 重複ファイル記録のクリーンアップ
         add_action('admin_init', array($this, 'cleanup_duplicate_files'));
+        
+        // ファイルデータのマイグレーション
+        add_action('admin_init', array($this, 'migrate_file_data'));
     }
     
     /**
@@ -292,7 +295,7 @@ class WP_Simple_File_Creator {
                         <button type="submit" id="save-file-btn" class="fcm-button">
                             ファイルを保存
                         </button>
-                        <a href="<?php echo admin_url('admin.php?page=file-creator-manager'); ?>" class="fcm-button" style="margin-left: 10px; text-decoration: none; display: inline-block;">
+                        <a href="<?php echo admin_url('admin.php?page=file-creator-manager'); ?>" class="fcm-button fcm-button-secondary" style="margin-left: 10px; text-decoration: none; display: inline-block;">
                             一覧に戻る
                         </a>
                     </div>
@@ -370,7 +373,7 @@ class WP_Simple_File_Creator {
         $files = get_option('fcm_created_files', array());
         
         if (empty($files)) {
-            echo '<p>まだファイルが作成されていません</p>';
+            echo '<p>まだファイル・フォルダが作成されていません</p>';
             return;
         }
         
@@ -389,19 +392,37 @@ class WP_Simple_File_Creator {
             }
         }
         
-        // 作成日時で降順ソート
+        // フォルダを先に、ファイルを後に、その後作成日時で降順ソート
         uasort($grouped_files, function($a, $b) {
+            $a_type = isset($a['type']) ? $a['type'] : 'file';
+            $b_type = isset($b['type']) ? $b['type'] : 'file';
+            
+            // タイプが異なる場合はディレクトリを優先
+            if ($a_type !== $b_type) {
+                return $a_type === 'directory' ? -1 : 1;
+            }
+            
+            // 同じタイプの場合は作成日時で降順ソート
             return strtotime($b['created_at']) - strtotime($a['created_at']);
         });
         
         echo '<div class="fcm-file-list">';
         foreach ($grouped_files as $file) {
-            $file_exists = file_exists($file['full_path']);
+            $file_type = isset($file['type']) ? $file['type'] : 'file';
+            $is_directory = $file_type === 'directory';
+            $file_exists = $is_directory ? is_dir($file['full_path']) : file_exists($file['full_path']);
+            
             ?>
-            <div class="fcm-file-item">
+            <div class="fcm-file-item fcm-item-<?php echo esc_attr($file_type); ?>">
                 <div class="fcm-file-info">
                     <div class="fcm-file-name">
+                        <?php if ($is_directory): ?>
+                            <span class="dashicons dashicons-category"></span>
+                        <?php else: ?>
+                            <span class="dashicons dashicons-media-default"></span>
+                        <?php endif; ?>
                         <?php echo esc_html($file['name']); ?>
+                        <span class="fcm-file-type"><?php echo $is_directory ? '（フォルダ）' : '（ファイル）'; ?></span>
                         <?php if (!$file_exists): ?>
                             <span style="color: #d63638;">（削除済み）</span>
                         <?php endif; ?>
@@ -411,17 +432,20 @@ class WP_Simple_File_Creator {
                 </div>
                 <div class="fcm-file-actions">
                     <?php if ($file_exists): ?>
+                        <?php if (!$is_directory): ?>
+                            <button 
+                                class="fcm-button fcm-edit-file" 
+                                data-file="<?php echo esc_attr($file['full_path']); ?>"
+                            >
+                                <span class="dashicons dashicons-edit"></span> 編集
+                            </button>
+                        <?php endif; ?>
                         <button 
-                            class="fcm-button fcm-edit-file" 
+                            class="fcm-button fcm-button-danger <?php echo $is_directory ? 'fcm-delete-dir' : 'fcm-delete-file'; ?>" 
                             data-file="<?php echo esc_attr($file['full_path']); ?>"
+                            <?php if ($is_directory): ?>data-dir="<?php echo esc_attr($file['full_path']); ?>"<?php endif; ?>
                         >
-                            編集
-                        </button>
-                        <button 
-                            class="fcm-button fcm-button-danger fcm-delete-file" 
-                            data-file="<?php echo esc_attr($file['full_path']); ?>"
-                        >
-                            削除
+                            <span class="dashicons dashicons-trash"></span> 削除
                         </button>
                     <?php endif; ?>
                 </div>
@@ -527,6 +551,9 @@ class WP_Simple_File_Creator {
         if (!wp_mkdir_p($full_path)) {
             wp_send_json_error(array('message' => 'ディレクトリの作成に失敗しました。パーミッションを確認してください。'));
         }
+        
+        // 作成したディレクトリを記録
+        $this->save_created_file($directory_name, $full_path, 'directory');
         
         // 操作履歴を保存
         $this->save_operation_history('フォルダ作成', $full_path, 'フォルダを作成しました');
@@ -741,7 +768,7 @@ class WP_Simple_File_Creator {
     /**
      * 作成したファイルを記録
      */
-    private function save_created_file($file_name, $full_path) {
+    private function save_created_file($file_name, $full_path, $type = 'file') {
         $files = get_option('fcm_created_files', array());
         
         // 既存の同じパスのファイル記録を削除
@@ -753,6 +780,7 @@ class WP_Simple_File_Creator {
         $files[] = array(
             'name' => $file_name,
             'full_path' => $full_path,
+            'type' => $type,
             'created_at' => current_time('mysql')
         );
         
@@ -798,6 +826,40 @@ class WP_Simple_File_Creator {
         
         // クリーンアップされたデータを保存
         update_option('fcm_created_files', array_values($grouped_files));
+    }
+    
+    /**
+     * ファイルデータのマイグレーション（typeフィールド追加）
+     */
+    public function migrate_file_data() {
+        // マイグレーション済みかチェック
+        if (get_option('fcm_data_migrated_v2', false)) {
+            return;
+        }
+        
+        $files = get_option('fcm_created_files', array());
+        $updated = false;
+        
+        foreach ($files as &$file) {
+            // typeフィールドが存在しない場合は追加
+            if (!isset($file['type'])) {
+                // ファイルが存在するかチェックしてタイプを決定
+                if (file_exists($file['full_path'])) {
+                    $file['type'] = is_dir($file['full_path']) ? 'directory' : 'file';
+                } else {
+                    // 削除済みの場合は拡張子で判定
+                    $file['type'] = (strpos($file['name'], '.') === false) ? 'directory' : 'file';
+                }
+                $updated = true;
+            }
+        }
+        
+        if ($updated) {
+            update_option('fcm_created_files', $files);
+        }
+        
+        // マイグレーション完了をマーク
+        update_option('fcm_data_migrated_v2', true);
     }
     
     /**

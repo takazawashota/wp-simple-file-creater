@@ -47,6 +47,18 @@
     background: #135e96;
 }
 
+.fcm-button-secondary {
+    background: #f6f7f7;
+    color: #50575e;
+    border: 1px solid #c3c4c7;
+}
+
+.fcm-button-secondary:hover {
+    background: #f0f0f1;
+    color: #1d2327;
+    border-color: #8c8f94;
+}
+
 .fcm-button-danger {
     background: #d63638;
 }
@@ -96,16 +108,46 @@
 .fcm-file-name {
     font-weight: 600;
     color: #1d2327;
+    display: flex;
+    align-items: center;
+    gap: 8px;
+}
+
+.fcm-file-name .dashicons {
+    font-size: 18px;
+}
+
+.fcm-file-type {
+    font-size: 11px;
+    color: #646970;
+    font-weight: normal;
+}
+
+.fcm-item-directory .fcm-file-name .dashicons {
+    color: #2271b1;
+}
+
+.fcm-item-file .fcm-file-name .dashicons {
+    color: #646970;
 }
 
 .fcm-file-path {
     font-size: 12px;
     color: #646970;
+    font-family: monospace;
 }
 
 .fcm-file-actions {
     display: flex;
     gap: 10px;
+}
+
+.fcm-file-actions .fcm-button {
+    padding: 6px 12px;
+    font-size: 13px;
+    display: inline-flex;
+    align-items: center;
+    gap: 4px;
 }
 
 .fcm-preset-buttons {

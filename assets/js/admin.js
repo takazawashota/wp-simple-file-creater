@@ -381,6 +381,38 @@ jQuery(document).ready(function ($) {
         });
     });
 
+    // フォルダ削除
+    $(document).on('click', '.fcm-delete-dir', function (e) {
+        e.preventDefault();
+
+        if (!confirm('このフォルダとその中身をすべて削除しますか？この操作は元に戻せません。')) {
+            return;
+        }
+
+        const dirPath = $(this).data('dir');
+
+        $.ajax({
+            url: fcm_ajax_object.ajax_url,
+            type: 'POST',
+            data: {
+                action: 'delete_directory',
+                nonce: fcm_ajax_object.nonce,
+                dir_path: dirPath
+            },
+            success: function (response) {
+                if (response.success) {
+                    alert('フォルダを削除しました');
+                    location.reload();
+                } else {
+                    alert('エラー: ' + response.data.message);
+                }
+            },
+            error: function () {
+                alert('エラーが発生しました');
+            }
+        });
+    });
+
     // ファイル編集
     $(document).on('click', '.fcm-edit-file', function (e) {
         e.preventDefault();
