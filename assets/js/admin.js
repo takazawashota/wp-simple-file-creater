@@ -6,6 +6,12 @@ jQuery(document).ready(function ($) {
         $('.fcm-tab-content').removeClass('active');
         $(this).addClass('active');
         $('#' + tabId).addClass('active');
+
+        // ファイル作成タブがアクティブになった時にrequired属性を復元
+        if (tabId === 'tab-create') {
+            $('#file_name').attr('required', 'required');
+            $('#file_path').attr('required', 'required');
+        }
     });
 
     // プリセットパス（PHPからローカライズされた値を使用）
@@ -54,8 +60,14 @@ jQuery(document).ready(function ($) {
                         response.data.forEach(function (item) {
                             if (item.type === 'dir') {
                                 // ディレクトリの場合
-                                html += '<div class="fcm-directory-item fcm-dir-item" data-path="' + item.path + '" data-type="' + item.type + '">';
-                                html += '📁 ' + item.name;
+                                html += '<div class="fcm-directory-file-item" data-path="' + item.path + '" data-type="' + item.type + '">';
+                                html += '<div class="fcm-file-info-dir">';
+                                html += '<span class="fcm-file-icon">📁</span>';
+                                html += '<span class="fcm-dir-name" data-path="' + item.path + '">' + item.name + '</span>';
+                                html += '</div>';
+                                html += '<div class="fcm-file-actions-dir">';
+                                html += '<button class="fcm-button-small fcm-button-danger fcm-delete-dir" data-dir="' + item.path + '">削除</button>';
+                                html += '</div>';
                                 html += '</div>';
                             } else {
                                 // ファイルの場合
@@ -83,8 +95,8 @@ jQuery(document).ready(function ($) {
         });
     }
 
-    // ディレクトリアイテムのクリック
-    $(document).on('click', '.fcm-dir-item', function () {
+    // ディレクトリ名クリック（ディレクトリ移動）
+    $(document).on('click', '.fcm-dir-name', function () {
         const path = $(this).data('path');
         // ディレクトリの場合は、その階層を表示
         loadDirectory(path + '/');
@@ -108,6 +120,12 @@ jQuery(document).ready(function ($) {
     // ディレクトリツリー内のファイル編集
     $(document).on('click', '.fcm-edit-file-dir', function (e) {
         e.stopPropagation();
+        e.preventDefault();
+
+        // 一時的にrequiredフィールドを無効化
+        $('#file_name').removeAttr('required');
+        $('#file_path').removeAttr('required');
+
         const filePath = $(this).data('file');
 
         // 編集ページに遷移
@@ -154,8 +172,58 @@ jQuery(document).ready(function ($) {
         });
     });
 
+    // ディレクトリツリー内のフォルダ削除
+    $(document).on('click', '.fcm-delete-dir', function (e) {
+        e.stopPropagation();
+
+        const dirPath = $(this).data('dir');
+        const dirName = dirPath.split('/').filter(Boolean).pop();
+
+        if (!confirm('フォルダ「' + dirName + '」とその中身をすべて削除しますか？\n\n⚠️ この操作は元に戻すことができません。')) {
+            return;
+        }
+
+        const $button = $(this);
+        $button.prop('disabled', true).text('削除中...');
+
+        $.ajax({
+            url: fcm_ajax_object.ajax_url,
+            type: 'POST',
+            data: {
+                action: 'delete_directory',
+                nonce: fcm_ajax_object.nonce,
+                dir_path: dirPath
+            },
+            success: function (response) {
+                if (response.success) {
+                    alert('フォルダを削除しました');
+                    // 現在のディレクトリを再読み込み
+                    const currentPath = $('#file_path').val() || fcm_ajax_object.presets.root;
+                    loadDirectory(currentPath);
+                } else {
+                    alert('エラー: ' + response.data.message);
+                    $button.prop('disabled', false).text('削除');
+                }
+            },
+            error: function () {
+                alert('フォルダの削除に失敗しました');
+                $button.prop('disabled', false).text('削除');
+            }
+        });
+    });
+
+    // 初期化処理
+    function initializeForm() {
+        // required属性を復元
+        $('#file_name').attr('required', 'required');
+        $('#file_path').attr('required', 'required');
+    }
+
     // 初期ディレクトリを読み込み
     loadDirectory(fcm_ajax_object.presets.root);
+
+    // 初期化実行
+    initializeForm();
 
     // ファイル作成フォームの送信
     $('#create-file-form').on('submit', function (e) {
@@ -167,6 +235,15 @@ jQuery(document).ready(function ($) {
 
         if (!fileName || !filePath) {
             alert('ファイル名とパスを入力してください');
+            return;
+        }
+
+        // 拡張子があるかチェック（ドットがあり、その後に文字がある場合は拡張子あり）
+        const hasExtension = fileName.includes('.') && fileName.split('.').pop().length > 0 && fileName.indexOf('.') < fileName.length - 1;
+
+        if (!hasExtension) {
+            // 拡張子がない場合はフォルダを作成
+            createDirectory(fileName, filePath);
             return;
         }
 
@@ -231,6 +308,52 @@ jQuery(document).ready(function ($) {
         createFile(false);
     });
 
+    // フォルダ作成関数
+    function createDirectory(directoryName, basePath) {
+        $('#create-file-btn').prop('disabled', true).text('作成中...');
+
+        $.ajax({
+            url: fcm_ajax_object.ajax_url,
+            type: 'POST',
+            data: {
+                action: 'create_directory',
+                nonce: fcm_ajax_object.nonce,
+                directory_name: directoryName,
+                base_path: basePath
+            },
+            success: function (response) {
+                if (response.success) {
+                    $('#message-container').html(
+                        '<div class="fcm-alert fcm-alert-success">' +
+                        response.data.message +
+                        '</div>'
+                    );
+                    // フォームをリセット
+                    $('#file_name').val('');
+                    $('#file_content').val('');
+                    // ディレクトリツリーを更新
+                    setTimeout(function () {
+                        location.reload();
+                    }, 1500);
+                } else {
+                    $('#message-container').html(
+                        '<div class="fcm-alert fcm-alert-error">' +
+                        response.data.message +
+                        '</div>'
+                    );
+                }
+            },
+            error: function () {
+                $('#message-container').html(
+                    '<div class="fcm-alert fcm-alert-error">エラーが発生しました</div>'
+                );
+            },
+            complete: function () {
+                $('#create-file-btn').prop('disabled', false).text('ファイルを作成');
+            }
+        });
+    }
+
     // ファイル削除
     $(document).on('click', '.fcm-delete-file', function () {
         if (!confirm('本当にこのファイルを削除しますか？')) {
@@ -259,7 +382,13 @@ jQuery(document).ready(function ($) {
     });
 
     // ファイル編集
-    $(document).on('click', '.fcm-edit-file', function () {
+    $(document).on('click', '.fcm-edit-file', function (e) {
+        e.preventDefault();
+
+        // 一時的にrequiredフィールドを無効化
+        $('#file_name').removeAttr('required');
+        $('#file_path').removeAttr('required');
+
         const filePath = $(this).data('file');
 
         // 編集ページに遷移

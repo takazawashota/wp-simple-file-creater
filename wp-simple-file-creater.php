@@ -29,7 +29,9 @@ class WP_Simple_File_Creator {
         
         // AJAXハンドラーを登録
         add_action('wp_ajax_create_file', array($this, 'ajax_create_file'));
+        add_action('wp_ajax_create_directory', array($this, 'ajax_create_directory'));
         add_action('wp_ajax_delete_file', array($this, 'ajax_delete_file'));
+        add_action('wp_ajax_delete_directory', array($this, 'ajax_delete_directory'));
         add_action('wp_ajax_get_file_content', array($this, 'ajax_get_file_content'));
         add_action('wp_ajax_list_directory', array($this, 'ajax_list_directory'));
         add_action('wp_ajax_check_file_exists', array($this, 'ajax_check_file_exists'));
@@ -143,10 +145,10 @@ class WP_Simple_File_Creator {
                                 type="text" 
                                 id="file_name" 
                                 name="file_name" 
-                                placeholder="例: my-custom-file.php"
+                                placeholder="例: my-custom-file.php または new-folder（フォルダ作成）"
                                 required
                             >
-                            <p class="description">拡張子を含めてファイル名を入力してください</p>
+                            <p class="description">拡張子を含めるとファイルを作成、拡張子を含めないとフォルダを作成します</p>
                         </div>
                         
                         <!-- ファイルパス -->
@@ -481,6 +483,45 @@ class WP_Simple_File_Creator {
     }
     
     /**
+     * AJAX: ディレクトリ作成
+     */
+    public function ajax_create_directory() {
+        // Nonceチェック
+        check_ajax_referer('fcm_ajax_nonce', 'nonce');
+        
+        // 権限チェック
+        if (!current_user_can('manage_options')) {
+            wp_send_json_error(array('message' => '権限がありません'));
+        }
+        
+        $directory_name = sanitize_file_name($_POST['directory_name']);
+        $base_path = wp_unslash($_POST['base_path']);
+        
+        // パスの検証
+        if (!$this->is_valid_path($base_path)) {
+            wp_send_json_error(array('message' => '無効なパスです'));
+        }
+        
+        // フルパスを生成
+        $full_path = rtrim($base_path, '/') . '/' . $directory_name;
+        
+        // ディレクトリが既に存在する場合
+        if (file_exists($full_path)) {
+            wp_send_json_error(array('message' => 'ディレクトリが既に存在します: ' . $full_path));
+        }
+        
+        // ディレクトリを作成
+        if (!wp_mkdir_p($full_path)) {
+            wp_send_json_error(array('message' => 'ディレクトリの作成に失敗しました。パーミッションを確認してください。'));
+        }
+        
+        wp_send_json_success(array(
+            'message' => 'ディレクトリを作成しました: ' . $full_path,
+            'path' => $full_path
+        ));
+    }
+    
+    /**
      * AJAX: ファイル削除
      */
     public function ajax_delete_file() {
@@ -501,6 +542,52 @@ class WP_Simple_File_Creator {
             wp_send_json_success(array('message' => 'ファイルを削除しました'));
         } else {
             wp_send_json_error(array('message' => 'ファイルの削除に失敗しました'));
+        }
+    }
+    
+    /**
+     * AJAX: ディレクトリ削除
+     */
+    public function ajax_delete_directory() {
+        check_ajax_referer('fcm_ajax_nonce', 'nonce');
+        
+        if (!current_user_can('manage_options')) {
+            wp_send_json_error(array('message' => '権限がありません'));
+        }
+        
+        $dir_path = wp_unslash($_POST['dir_path']);
+        
+        // パスの検証
+        if (!$this->is_valid_path($dir_path)) {
+            wp_send_json_error(array('message' => '無効なパスです'));
+        }
+        
+        if (!is_dir($dir_path)) {
+            wp_send_json_error(array('message' => 'ディレクトリが見つかりません'));
+        }
+        
+        // 重要なシステムディレクトリの保護
+        $protected_dirs = array(
+            ABSPATH,
+            WP_CONTENT_DIR,
+            get_theme_root(),
+            WP_PLUGIN_DIR,
+            wp_upload_dir()['basedir']
+        );
+        
+        foreach ($protected_dirs as $protected) {
+            if ($dir_path === $protected || $dir_path === rtrim($protected, '/')) {
+                wp_send_json_error(array('message' => 'システムディレクトリは削除できません'));
+            }
+        }
+        
+        // ディレクトリを再帰的に削除
+        if ($this->delete_directory_recursive($dir_path)) {
+            // 削除されたディレクトリ内のファイルをレコードからも削除
+            $this->remove_files_in_directory($dir_path);
+            wp_send_json_success(array('message' => 'ディレクトリを削除しました'));
+        } else {
+            wp_send_json_error(array('message' => 'ディレクトリの削除に失敗しました'));
         }
     }
     
@@ -687,6 +774,46 @@ class WP_Simple_File_Creator {
         
         // クリーンアップされたデータを保存
         update_option('fcm_created_files', array_values($grouped_files));
+    }
+    
+    /**
+     * ディレクトリを再帰的に削除
+     */
+    private function delete_directory_recursive($dir) {
+        if (!is_dir($dir)) {
+            return false;
+        }
+        
+        $files = array_diff(scandir($dir), array('.', '..'));
+        
+        foreach ($files as $file) {
+            $path = $dir . DIRECTORY_SEPARATOR . $file;
+            
+            if (is_dir($path)) {
+                // サブディレクトリを再帰的に削除
+                $this->delete_directory_recursive($path);
+            } else {
+                // ファイルを削除
+                unlink($path);
+            }
+        }
+        
+        // 空になったディレクトリを削除
+        return rmdir($dir);
+    }
+    
+    /**
+     * ディレクトリ内のファイルをレコードから削除
+     */
+    private function remove_files_in_directory($dir_path) {
+        $files = get_option('fcm_created_files', array());
+        
+        $files = array_filter($files, function($file) use ($dir_path) {
+            // ディレクトリパスで始まるファイルパスを除外
+            return strpos($file['full_path'], $dir_path) !== 0;
+        });
+        
+        update_option('fcm_created_files', array_values($files));
     }
 }
 

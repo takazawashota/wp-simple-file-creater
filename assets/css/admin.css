@@ -257,6 +257,17 @@
     font-size: 13px;
 }
 
+.fcm-dir-name {
+    color: #2271b1;
+    font-size: 13px;
+    font-weight: 500;
+    cursor: pointer;
+}
+
+.fcm-dir-name:hover {
+    color: #135e96;
+}
+
 .fcm-file-actions-dir {
     display: flex;
     gap: 4px;
