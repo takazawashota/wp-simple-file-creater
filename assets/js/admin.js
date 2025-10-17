@@ -199,43 +199,8 @@ jQuery(document).ready(function ($) {
     $(document).on('click', '.fcm-edit-file', function () {
         const filePath = $(this).data('file');
 
-        $.ajax({
-            url: fcm_ajax_object.ajax_url,
-            type: 'POST',
-            data: {
-                action: 'get_file_content',
-                nonce: fcm_ajax_object.nonce,
-                file_path: filePath
-            },
-            success: function (response) {
-                if (response.success) {
-                    // タブを「ファイル作成」に切り替え
-                    $('.fcm-tab[data-tab="tab-create"]').click();
-
-                    // フォームに値を設定
-                    $('#file_content').val(response.data.content);
-                    $('#file_name').val(response.data.filename);
-                    $('#file_path').val(response.data.directory);
-
-                    // ディレクトリツリーも更新
-                    loadDirectory(response.data.directory);
-
-                    // 上部にスクロール
-                    $('html, body').animate({ scrollTop: 0 }, 'slow');
-
-                    // 編集中であることを通知
-                    $('#message-container').html(
-                        '<div class="fcm-alert fcm-alert-success">' +
-                        'ファイル名「' + response.data.filename + '」を編集中です。変更後「ファイルを作成」ボタンで上書き保存されます。' +
-                        '</div>'
-                    );
-                } else {
-                    alert('エラー: ' + response.data.message);
-                }
-            },
-            error: function () {
-                alert('ファイルの読み込みに失敗しました');
-            }
-        });
+        // 編集ページに遷移
+        const editUrl = fcm_ajax_object.edit_page_url + '&file=' + encodeURIComponent(filePath);
+        window.location.href = editUrl;
     });
 });

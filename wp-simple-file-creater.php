@@ -54,6 +54,16 @@ class WP_Simple_File_Creator {
             'dashicons-media-code',               // アイコン
             80                                    // メニューの位置
         );
+        
+        // 編集専用のサブメニューページを追加（非表示）
+        add_submenu_page(
+            null,                                 // 親ページ（nullで非表示）
+            'ファイル編集',                        // ページタイトル
+            'ファイル編集',                        // メニュータイトル
+            'manage_options',                     // 必要な権限
+            'file-creator-edit',                  // メニュースラッグ
+            array($this, 'render_edit_page')      // コールバック関数
+        );
     }
     
     /**
@@ -61,7 +71,7 @@ class WP_Simple_File_Creator {
      */
     public function enqueue_admin_assets($hook) {
         // 自分のページでのみ読み込み
-        if ($hook !== 'toplevel_page_file-creator-manager') {
+        if ($hook !== 'toplevel_page_file-creator-manager' && $hook !== 'admin_page_file-creator-edit') {
             return;
         }
         
@@ -86,6 +96,7 @@ class WP_Simple_File_Creator {
         wp_localize_script('fcm-admin-script', 'fcm_ajax_object', array(
             'ajax_url' => admin_url('admin-ajax.php'),
             'nonce' => wp_create_nonce('fcm_ajax_nonce'),
+            'edit_page_url' => admin_url('admin.php?page=file-creator-edit'),
             'presets' => array(
                 'wp-content' => WP_CONTENT_DIR . '/',
                 'themes' => get_theme_root() . '/',
@@ -204,6 +215,140 @@ class WP_Simple_File_Creator {
                 </ul>
             </div>
         </div>
+        <?php
+    }
+    
+    /**
+     * 編集ページのレンダリング
+     */
+    public function render_edit_page() {
+        // 権限チェック
+        if (!current_user_can('manage_options')) {
+            wp_die('権限がありません');
+        }
+        
+        // パラメータを取得
+        $file_path = isset($_GET['file']) ? wp_unslash($_GET['file']) : '';
+        
+        if (empty($file_path) || !file_exists($file_path)) {
+            wp_die('ファイルが見つかりません');
+        }
+        
+        // ファイル内容を取得
+        $file_content = file_get_contents($file_path);
+        $file_name = basename($file_path);
+        $directory = dirname($file_path) . '/';
+        
+        ?>
+        <div class="wrap">
+            <h1>ファイル編集</h1>
+            
+            <div id="message-container"></div>
+            
+            <div class="fcm-container">
+                <form id="edit-file-form">
+                    <div class="fcm-form-group">
+                        <label for="edit_file_name">ファイル名</label>
+                        <input 
+                            type="text" 
+                            id="edit_file_name" 
+                            name="file_name" 
+                            value="<?php echo esc_attr($file_name); ?>"
+                            readonly
+                        >
+                    </div>
+                    
+                    <div class="fcm-form-group">
+                        <label for="edit_file_path">ファイルパス</label>
+                        <input 
+                            type="text" 
+                            id="edit_file_path" 
+                            name="file_path" 
+                            value="<?php echo esc_attr($directory); ?>"
+                            readonly
+                        >
+                    </div>
+                    
+                    <div class="fcm-form-group">
+                        <label for="edit_file_content">ファイル内容</label>
+                        <textarea 
+                            id="edit_file_content" 
+                            name="file_content"
+                            placeholder="ファイルの内容を入力してください..."
+                        ><?php echo esc_textarea($file_content); ?></textarea>
+                    </div>
+                    
+                    <div class="fcm-form-group">
+                        <button type="submit" id="save-file-btn" class="fcm-button">
+                            ファイルを保存
+                        </button>
+                        <a href="<?php echo admin_url('admin.php?page=file-creator-manager'); ?>" class="fcm-button" style="margin-left: 10px; text-decoration: none; display: inline-block;">
+                            一覧に戻る
+                        </a>
+                    </div>
+                </form>
+            </div>
+            
+            <!-- 警告メッセージ -->
+            <div class="fcm-container" style="margin-top: 20px;">
+                <h3>編集時の注意事項</h3>
+                <ul>
+                    <li>ファイルの変更は慎重に行ってください</li>
+                    <li>PHPファイルの場合、構文エラーがあるとサイトが動作しなくなる可能性があります</li>
+                    <li>重要なファイルを編集する前は必ずバックアップを取ってください</li>
+                </ul>
+            </div>
+        </div>
+        
+        <script>
+        jQuery(document).ready(function($) {
+            $('#edit-file-form').on('submit', function(e) {
+                e.preventDefault();
+                
+                const fileName = $('#edit_file_name').val();
+                const filePath = $('#edit_file_path').val();
+                const fileContent = $('#edit_file_content').val();
+                
+                $('#save-file-btn').prop('disabled', true).text('保存中...');
+                
+                $.ajax({
+                    url: fcm_ajax_object.ajax_url,
+                    type: 'POST',
+                    data: {
+                        action: 'create_file',
+                        nonce: fcm_ajax_object.nonce,
+                        file_name: fileName,
+                        file_path: filePath,
+                        file_content: fileContent,
+                        force_overwrite: true
+                    },
+                    success: function(response) {
+                        if (response.success) {
+                            $('#message-container').html(
+                                '<div class="fcm-alert fcm-alert-success">' + 
+                                response.data.message + 
+                                '</div>'
+                            );
+                        } else {
+                            $('#message-container').html(
+                                '<div class="fcm-alert fcm-alert-error">' + 
+                                response.data.message + 
+                                '</div>'
+                            );
+                        }
+                    },
+                    error: function() {
+                        $('#message-container').html(
+                            '<div class="fcm-alert fcm-alert-error">エラーが発生しました</div>'
+                        );
+                    },
+                    complete: function() {
+                        $('#save-file-btn').prop('disabled', false).text('ファイルを保存');
+                    }
+                });
+            });
+        });
+        </script>
         <?php
     }
     

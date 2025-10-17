@@ -189,5 +189,40 @@
 }
 
 .fcm-parent-dir {
-    padding-bottom: 0;
+    border-bottom: 1px solid #ddd;
+    padding-bottom: 8px;
+    margin-bottom: 8px;
+}
+
+/* 編集ページ専用スタイル */
+.fcm-form-group input[readonly] {
+    background: #f6f7f7;
+    border-color: #dcdcde;
+    color: #646970;
+    cursor: not-allowed;
+}
+
+.fcm-form-group textarea {
+    min-height: 400px;
+    font-family: 'Monaco', 'Menlo', 'Ubuntu Mono', monospace;
+    font-size: 13px;
+    line-height: 1.5;
+}
+
+.fcm-button {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    text-decoration: none;
+    border: none;
+    cursor: pointer;
+    font-size: 14px;
+    font-weight: 500;
+    padding: 10px 20px;
+    border-radius: 4px;
+    transition: background-color 0.2s ease;
+}
+
+.fcm-button:hover {
+    text-decoration: none;
 }
