@@ -294,7 +294,6 @@
 
 .fcm-directory-file-item[data-type="dir"]:hover {
     background: #e1f5fe;
-    border-left: 3px solid #2271b1;
 }
 
 .fcm-file-info-dir {
