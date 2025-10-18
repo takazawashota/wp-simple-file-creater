@@ -51,14 +51,13 @@ class WP_Simple_File_Creator {
      * 管理画面にメニューを追加
      */
     public function add_admin_menu() {
-        add_menu_page(
-            'WP Simple File Creator',           // ページタイトル
+        add_submenu_page(
+            'tools.php',                          // 親メニュー（ツール）
+            'WP Simple File Creator',             // ページタイトル
             'WP Simple File Creator',                       // メニュータイトル
             'manage_options',                     // 必要な権限
             'file-creator-manager',               // メニュースラッグ
-            array($this, 'render_admin_page'),    // コールバック関数
-            'dashicons-media-code',               // アイコン
-            80                                    // メニューの位置
+            array($this, 'render_admin_page')     // コールバック関数
         );
         
         // 編集専用のサブメニューページを追加（非表示）
@@ -77,7 +76,7 @@ class WP_Simple_File_Creator {
      */
     public function enqueue_admin_assets($hook) {
         // 自分のページでのみ読み込み
-        if ($hook !== 'toplevel_page_file-creator-manager' && $hook !== 'admin_page_file-creator-edit') {
+        if ($hook !== 'tools_page_file-creator-manager' && $hook !== 'admin_page_file-creator-edit') {
             return;
         }
         
