@@ -1,19 +1,4 @@
 jQuery(document).ready(function ($) {
-    // タブ切り替え
-    $('.fcm-tab').on('click', function () {
-        const tabId = $(this).data('tab');
-        $('.fcm-tab').removeClass('active');
-        $('.fcm-tab-content').removeClass('active');
-        $(this).addClass('active');
-        $('#' + tabId).addClass('active');
-
-        // ファイル作成タブがアクティブになった時にrequired属性を復元
-        if (tabId === 'tab-create') {
-            $('#file_name').attr('required', 'required');
-            $('#file_path').attr('required', 'required');
-        }
-    });
-
     // プリセットパス（PHPからローカライズされた値を使用）
     const presets = fcm_ajax_object.presets;
 
@@ -95,8 +80,13 @@ jQuery(document).ready(function ($) {
         });
     }
 
-    // ディレクトリ名クリック（ディレクトリ移動）
-    $(document).on('click', '.fcm-dir-name', function () {
+    // ディレクトリ項目全体クリック（ディレクトリ移動）
+    $(document).on('click', '.fcm-directory-file-item[data-type="dir"]', function (e) {
+        // ボタンがクリックされた場合は処理しない
+        if ($(e.target).hasClass('fcm-button-small') || $(e.target).closest('.fcm-button-small').length > 0) {
+            return;
+        }
+
         const path = $(this).data('path');
         // ディレクトリの場合は、その階層を表示
         loadDirectory(path + '/');

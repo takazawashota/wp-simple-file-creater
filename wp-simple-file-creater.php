@@ -125,6 +125,16 @@ class WP_Simple_File_Creator {
             wp_die('権限がありません');
         }
         
+        // 現在のタブを取得
+        $current_tab = isset($_GET['tab']) ? sanitize_text_field($_GET['tab']) : 'create';
+        $base_url = admin_url('tools.php?page=file-creator-manager');
+        
+        // デバッグ: 有効なタブでない場合はデフォルトに設定
+        $valid_tabs = array('create', 'files', 'history');
+        if (!in_array($current_tab, $valid_tabs)) {
+            $current_tab = 'create';
+        }
+        
         ?>
         <div class="wrap">
             <h1>WP Simple File Creator</h1>
@@ -134,13 +144,23 @@ class WP_Simple_File_Creator {
             <div class="fcm-container">
                 <!-- タブ -->
                 <div class="fcm-tabs">
-                    <button class="fcm-tab active" data-tab="tab-create">ファイル作成</button>
-                    <button class="fcm-tab" data-tab="tab-files">作成済みファイル</button>
-                    <button class="fcm-tab" data-tab="tab-history">操作履歴</button>
+                    <a href="<?php echo esc_url($base_url . '&tab=create'); ?>" 
+                       class="fcm-tab <?php echo $current_tab === 'create' ? 'active' : ''; ?>">
+                        ファイル作成
+                    </a>
+                    <a href="<?php echo esc_url($base_url . '&tab=files'); ?>" 
+                       class="fcm-tab <?php echo $current_tab === 'files' ? 'active' : ''; ?>">
+                        作成済みファイル
+                    </a>
+                    <a href="<?php echo esc_url($base_url . '&tab=history'); ?>" 
+                       class="fcm-tab <?php echo $current_tab === 'history' ? 'active' : ''; ?>">
+                        操作履歴
+                    </a>
                 </div>
                 
+                <?php if ($current_tab === 'create'): ?>
                 <!-- タブ1: ファイル作成 -->
-                <div id="tab-create" class="fcm-tab-content active">
+                <div id="tab-create" class="fcm-tab-content">
                     <form id="create-file-form">
                         <!-- ファイル名 -->
                         <div class="fcm-form-group">
@@ -202,17 +222,23 @@ class WP_Simple_File_Creator {
                     </form>
                 </div>
                 
+                <?php endif; ?>
+                
+                <?php if ($current_tab === 'files'): ?>
                 <!-- タブ2: 作成済みファイル -->
                 <div id="tab-files" class="fcm-tab-content">
                     <h2>作成済みファイル一覧</h2>
                     <?php $this->render_file_list(); ?>
                 </div>
+                <?php endif; ?>
                 
+                <?php if ($current_tab === 'history'): ?>
                 <!-- タブ3: 操作履歴 -->
                 <div id="tab-history" class="fcm-tab-content">
                     <h2>操作履歴</h2>
                     <?php $this->render_history_list(); ?>
                 </div>
+                <?php endif; ?>
             </div>
             
             <!-- 警告メッセージ -->
@@ -294,7 +320,7 @@ class WP_Simple_File_Creator {
                         <button type="submit" id="save-file-btn" class="fcm-button">
                             ファイルを保存
                         </button>
-                        <a href="<?php echo admin_url('admin.php?page=file-creator-manager'); ?>" class="fcm-button fcm-button-secondary" style="margin-left: 10px; text-decoration: none; display: inline-block;">
+                        <a href="<?php echo admin_url('tools.php?page=file-creator-manager&tab=files'); ?>" class="fcm-button fcm-button-secondary" style="margin-left: 10px; text-decoration: none; display: inline-block;">
                             一覧に戻る
                         </a>
                     </div>
