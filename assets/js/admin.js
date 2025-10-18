@@ -1,4 +1,106 @@
 jQuery(document).ready(function ($) {
+    // 成功通知を表示する関数
+    function showSuccessNotification(title, message) {
+        // シンプルで美しい通知を作成
+        const notification = $('<div class="fcm-toast fcm-toast-success">' +
+            '<div class="fcm-toast-content">' +
+            '<div class="fcm-toast-icon"><span class="dashicons dashicons-yes"></span></div>' +
+            '<div class="fcm-toast-text">' +
+            '<div class="fcm-toast-title">' + title + '</div>' +
+            '<div class="fcm-toast-message">' + message + '</div>' +
+            '</div>' +
+            '</div>' +
+            '</div>');        // 通知をページに追加
+        $('body').append(notification);
+
+        // スムーズなアニメーション効果
+        setTimeout(function () {
+            notification.addClass('fcm-toast-show');
+        }, 100);
+
+        // 6秒後に自動で閉じる
+        setTimeout(function () {
+            notification.removeClass('fcm-toast-show');
+            setTimeout(function () {
+                notification.remove();
+            }, 400);
+        }, 6000);
+    }
+
+    // 削除通知を表示する関数
+    function showDeleteNotification(title, message) {
+        // 削除用の通知を作成
+        const notification = $('<div class="fcm-toast fcm-toast-delete">' +
+            '<div class="fcm-toast-content">' +
+            '<div class="fcm-toast-icon"><span class="dashicons dashicons-trash"></span></div>' +
+            '<div class="fcm-toast-text">' +
+            '<div class="fcm-toast-title">' + title + '</div>' +
+            '<div class="fcm-toast-message">' + message + '</div>' +
+            '</div>' +
+            '</div>' +
+            '</div>');
+
+        // 通知をページに追加
+        $('body').append(notification);
+
+        // スムーズなアニメーション効果
+        setTimeout(function () {
+            notification.addClass('fcm-toast-show');
+        }, 100);
+
+        // 3秒後に自動で閉じる
+        setTimeout(function () {
+            notification.removeClass('fcm-toast-show');
+            setTimeout(function () {
+                notification.remove();
+            }, 400);
+        }, 3000);
+    }
+
+    // ページロード時にセッションストレージから通知をチェック
+    function checkPendingNotification() {
+        // 成功通知をチェック
+        const successData = sessionStorage.getItem('fcm_success_notification');
+        if (successData) {
+            try {
+                const notification = JSON.parse(successData);
+                const currentTime = Date.now();
+
+                if (currentTime - notification.timestamp < 300000) {
+                    setTimeout(function () {
+                        showSuccessNotification(notification.title, notification.message);
+                    }, 500);
+                }
+
+                sessionStorage.removeItem('fcm_success_notification');
+            } catch (e) {
+                sessionStorage.removeItem('fcm_success_notification');
+            }
+        }
+
+        // 削除通知をチェック
+        const deleteData = sessionStorage.getItem('fcm_delete_notification');
+        if (deleteData) {
+            try {
+                const notification = JSON.parse(deleteData);
+                const currentTime = Date.now();
+
+                if (currentTime - notification.timestamp < 300000) {
+                    setTimeout(function () {
+                        showDeleteNotification(notification.title, notification.message);
+                    }, 500);
+                }
+
+                sessionStorage.removeItem('fcm_delete_notification');
+            } catch (e) {
+                sessionStorage.removeItem('fcm_delete_notification');
+            }
+        }
+    }
+
+    // ページロード時に通知をチェック
+    checkPendingNotification();
+
     // プリセットパス（PHPからローカライズされた値を使用）
     const presets = fcm_ajax_object.presets;
 
@@ -146,7 +248,9 @@ jQuery(document).ready(function ($) {
             },
             success: function (response) {
                 if (response.success) {
-                    alert('ファイルを削除しました');
+                    // 即座に削除通知を表示
+                    showDeleteNotification('削除が完了しました！', 'ファイルを削除しました');
+
                     // 現在のディレクトリを再読み込み
                     const currentPath = $('#file_path').val() || fcm_ajax_object.presets.root;
                     loadDirectory(currentPath);
@@ -186,7 +290,9 @@ jQuery(document).ready(function ($) {
             },
             success: function (response) {
                 if (response.success) {
-                    alert('フォルダを削除しました');
+                    // 即座に削除通知を表示
+                    showDeleteNotification('削除が完了しました！', 'フォルダを削除しました');
+
                     // 現在のディレクトリを再読み込み
                     const currentPath = $('#file_path').val() || fcm_ajax_object.presets.root;
                     loadDirectory(currentPath);
@@ -254,6 +360,13 @@ jQuery(document).ready(function ($) {
                 },
                 success: function (response) {
                     if (response.success) {
+                        // リロード後に通知を表示するためにセッションストレージに保存
+                        sessionStorage.setItem('fcm_success_notification', JSON.stringify({
+                            title: '作成が完了しました！',
+                            message: response.data.message,
+                            timestamp: Date.now()
+                        }));
+
                         $('#message-container').html(
                             '<div class="fcm-alert fcm-alert-success">' +
                             response.data.message +
@@ -264,7 +377,7 @@ jQuery(document).ready(function ($) {
                         // ファイルリストを更新
                         setTimeout(function () {
                             location.reload();
-                        }, 1500);
+                        }, 800);
                     } else {
                         // 上書き確認が必要な場合
                         if (response.data.requires_confirmation) {
@@ -313,6 +426,13 @@ jQuery(document).ready(function ($) {
             },
             success: function (response) {
                 if (response.success) {
+                    // リロード後に通知を表示するためにセッションストレージに保存
+                    sessionStorage.setItem('fcm_success_notification', JSON.stringify({
+                        title: '作成が完了しました！',
+                        message: response.data.message,
+                        timestamp: Date.now()
+                    }));
+
                     $('#message-container').html(
                         '<div class="fcm-alert fcm-alert-success">' +
                         response.data.message +
@@ -324,7 +444,7 @@ jQuery(document).ready(function ($) {
                     // ディレクトリツリーを更新
                     setTimeout(function () {
                         location.reload();
-                    }, 1500);
+                    }, 800);
                 } else {
                     $('#message-container').html(
                         '<div class="fcm-alert fcm-alert-error">' +
@@ -362,8 +482,16 @@ jQuery(document).ready(function ($) {
             },
             success: function (response) {
                 if (response.success) {
-                    alert('ファイルを削除しました');
-                    location.reload();
+                    // リロード後に削除通知を表示するためにセッションストレージに保存
+                    sessionStorage.setItem('fcm_delete_notification', JSON.stringify({
+                        title: '削除が完了しました！',
+                        message: 'ファイルを削除しました',
+                        timestamp: Date.now()
+                    }));
+
+                    setTimeout(function () {
+                        location.reload();
+                    }, 300);
                 } else {
                     alert('エラー: ' + response.data.message);
                 }
@@ -391,8 +519,16 @@ jQuery(document).ready(function ($) {
             },
             success: function (response) {
                 if (response.success) {
-                    alert('フォルダを削除しました');
-                    location.reload();
+                    // リロード後に削除通知を表示するためにセッションストレージに保存
+                    sessionStorage.setItem('fcm_delete_notification', JSON.stringify({
+                        title: '削除が完了しました！',
+                        message: 'フォルダを削除しました',
+                        timestamp: Date.now()
+                    }));
+
+                    setTimeout(function () {
+                        location.reload();
+                    }, 300);
                 } else {
                     alert('エラー: ' + response.data.message);
                 }
